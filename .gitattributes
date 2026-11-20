@@ -1,0 +1,4 @@
+# 統一換行字元，避免 Mac / Windows 混用時每行都顯示被修改
+* text=auto eol=lf
+*.png binary
+*.jpg binary
