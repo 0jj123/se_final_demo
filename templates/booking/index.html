@@ -1,6 +1,226 @@
+
 {% extends "base.html" %}
-{% block title %}模組二：空間/物品預約借用{% endblock %}
+
+{% block title %}空間／物品預約借用{% endblock %}
+
 {% block content %}
-<h2>模組二：空間/物品預約借用</h2>
-<p>TODO</p>
+
+<h2>空間／物品預約借用</h2>
+
+<p>請選擇教室及查詢日期：</p>
+
+<form action="/booking/" method="get">
+
+    <label for="room_id">選擇教室：</label>
+
+    <select id="room_id" name="room_id" required>
+        <option value="">請選擇教室</option>
+
+        {% for room in rooms %}
+        <option value="{{ room.id }}"
+            {% if selected_room and selected_room.id == room.id %}
+            selected
+            {% endif %}
+        >
+            {{ room.code }} - {{ room.name }}
+        </option>
+        {% endfor %}
+    </select>
+
+    <label for="week_date">選擇日期：</label>
+
+    <input
+        type="date"
+        id="week_date"
+        name="week_date"
+        value="{{ week_date }}"
+        required
+    >
+
+    <button type="submit">查詢借用狀況</button>
+
+</form>
+
+{% if selected_room %}
+
+<hr>
+
+<h3>目前選擇的教室</h3>
+
+<p>教室編號：{{ selected_room.code }}</p>
+<p>教室名稱：{{ selected_room.name }}</p>
+
+<h3>本週借用狀況</h3>
+
+<table border="1" cellpadding="10"
+       cellspacing="0"
+       style="border-collapse: collapse;
+              width: 100%;
+              text-align: center;">
+
+    <tr>
+        {% for day in week_days %}
+        <th>{{ day.weekday }}</th>
+        {% endfor %}
+    </tr>
+
+    <tr>
+        {% for day in week_days %}
+        <td>{{ day.date }}</td>
+        {% endfor %}
+    </tr>
+
+    <tr>
+        {% for day in week_days %}
+
+        <td style="vertical-align: top;">
+
+            {% set ns = namespace(found=false) %}
+
+            {% for booking in bookings %}
+
+                {% if booking.booking_date.isoformat() == day.date %}
+
+                    {% set ns.found = true %}
+
+                    <div style="margin-bottom: 10px;">
+
+                        <strong>
+                            {{ booking.start_time.strftime('%H:%M') }}
+                            ~
+                            {{ booking.end_time.strftime('%H:%M') }}
+                        </strong>
+
+                        <p>
+                            {% if booking.status == 'pending' %}
+                                待審核
+                            {% elif booking.status == 'approved' %}
+                                已核准
+                            {% endif %}
+                        </p>
+
+                    </div>
+
+                {% endif %}
+
+            {% endfor %}
+
+            {% if not ns.found %}
+                <span>無預約紀錄</span>
+            {% endif %}
+
+        </td>
+
+        {% endfor %}
+    </tr>
+
+</table>
+
+<p>※ 顯示待審核及已核准的預約，不包含退件紀錄。</p>
+
+<hr>
+
+<h3>新增教室預約</h3>
+
+<p>請填寫想要預約的日期、時間及借用物品。</p>
+
+<form id="booking-form" action="/booking/create" method="post">
+
+    <p>
+        <label for="booking_room">預約教室：</label>
+
+        <input
+            type="text"
+            id="booking_room"
+            value="{{ selected_room.code }} - {{ selected_room.name }}"
+            readonly
+        >
+
+        <input
+            type="hidden"
+            name="room_id"
+            value="{{ selected_room.id }}"
+        >
+    </p>
+
+    <p>
+        <label for="booking_date">預約日期：</label>
+
+        <input
+            type="date"
+            id="booking_date"
+            name="booking_date"
+            value="{{ week_date }}"
+            required
+        >
+    </p>
+
+    <p>
+        <label for="start_time">開始時間：</label>
+
+        <input
+            type="time"
+            id="start_time"
+            name="start_time"
+            required
+        >
+    </p>
+
+    <p>
+        <label for="end_time">結束時間：</label>
+
+        <input
+            type="time"
+            id="end_time"
+            name="end_time"
+            required
+        >
+    </p>
+
+    <h4>選擇借用物品（可複選）</h4>
+
+    {% for item in items %}
+
+    <p>
+        <label for="item_{{ item.id }}">
+            <input
+                type="checkbox"
+                id="item_{{ item.id }}"
+                name="item_ids"
+                value="{{ item.id }}"
+            >
+
+            {{ item.name }}
+            （總數量：{{ item.total_quantity }}）
+        </label>
+
+        <label for="quantity_{{ item.id }}">借用數量：</label>
+
+        <input
+            type="number"
+            id="quantity_{{ item.id }}"
+            name="quantity_{{ item.id }}"
+            min="1"
+            max="{{ item.total_quantity }}"
+            value="1"
+            style="width: 60px;"
+        >
+    </p>
+
+    {% endfor %}
+
+    {% if not items %}
+    <p>目前尚無可借用物品。</p>
+    {% endif %}
+
+    <button type="submit" disabled>
+        送出預約申請
+    </button>
+
+</form>
+
+<p>※ 目前僅供表單測試，尚未開放送出預約。</p>
+
+{% endif %}
+
 {% endblock %}
