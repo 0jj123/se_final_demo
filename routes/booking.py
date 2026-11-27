@@ -26,7 +26,7 @@ async def index(
     conn=Depends(getDB)
 ):
 
-    # 取得所有教室及物品
+    # 取得所有教室與可借用物品
     async with conn.cursor() as cur:
         await cur.execute("""
             SELECT id, code, name
@@ -48,7 +48,7 @@ async def index(
         None
     )
 
-    # 計算星期一到星期日
+    # 計算選擇日期所在的星期
     chosen_date = week_date or date.today()
 
     monday = chosen_date - timedelta(
@@ -70,7 +70,7 @@ async def index(
             "weekday": weekdays[i]
         })
 
-    # 查詢選定教室本週的預約
+    # 查詢該教室本週的預約紀錄
     bookings = []
 
     if selected_room:
@@ -92,6 +92,7 @@ async def index(
 
             bookings = await cur.fetchall()
 
+    # 將資料傳給 HTML
     return templates.TemplateResponse(
         request,
         "booking/index.html",
@@ -117,12 +118,11 @@ async def create_booking(
     conn=Depends(getDB)
 ):
 
-    # 必須登入才能預約
+    # 只有登入者才能預約
     user = require_login(request)
 
     form = await request.form()
 
-    # 檢查輸入資料
     try:
         room_id = int(form["room_id"])
 
@@ -138,6 +138,7 @@ async def create_booking(
             str(form["end_time"]), "%H:%M"
         ).time()
 
+        # 取得選擇的借用物品
         item_ids = [
             int(value)
             for value in form.getlist("item_ids")
@@ -159,32 +160,32 @@ async def create_booking(
             detail="預約資料格式不正確"
         )
 
-    # 不可預約過去的日期
+    # 檢查預約日期
     if booking_date < date.today():
         raise HTTPException(
             status_code=400,
             detail="不能預約過去的日期"
         )
 
-    # 結束時間必須晚於開始時間
+    # 檢查開始與結束時間
     if start_time >= end_time:
         raise HTTPException(
             status_code=400,
             detail="結束時間必須晚於開始時間"
         )
 
-    # 借用數量必須大於零
+    # 檢查物品數量
     if any(q <= 0 for q in quantities.values()):
         raise HTTPException(
             status_code=400,
             detail="借用數量必須大於 0"
         )
 
-    # 同一次交易中檢查並建立預約
+    # 使用資料庫交易
     async with conn.transaction():
         async with conn.cursor() as cur:
 
-            # 確認教室存在並鎖定
+            # 確認教室存在
             await cur.execute("""
                 SELECT id
                 FROM rooms
@@ -195,10 +196,10 @@ async def create_booking(
             if await cur.fetchone() is None:
                 raise HTTPException(
                     status_code=404,
-                    detail="找不到這間教室"
+                    detail="找不到教室"
                 )
 
-            # 檢查預約時間衝突
+            # 檢查教室時間是否衝突
             await cur.execute("""
                 SELECT EXISTS (
                     SELECT 1
@@ -224,7 +225,7 @@ async def create_booking(
                     detail="這間教室在此時段已有預約"
                 )
 
-            # 檢查借用物品數量
+            # 檢查物品借用數量
             if quantities:
                 await cur.execute("""
                     SELECT id, name, total_quantity
@@ -273,7 +274,7 @@ async def create_booking(
                     if quantities[item["id"]] > available:
                         raise HTTPException(
                             status_code=409,
-                            detail=f"{item['name']} 可借數量不足"
+                            detail=f"{item['name']} 數量不足"
                         )
 
             # 建立待審核預約
@@ -299,7 +300,7 @@ async def create_booking(
             new_booking = await cur.fetchone()
             booking_id = new_booking["id"]
 
-            # 儲存選擇的物品
+            # 儲存借用物品
             for item_id, quantity in quantities.items():
                 await cur.execute("""
                     INSERT INTO booking_items (
@@ -324,7 +325,7 @@ async def create_booking(
 
 
 # =====================================
-# 3. 管理員查看預約申請
+# 3. 管理員查看預約紀錄
 # =====================================
 
 @router.get("/admin")
@@ -333,7 +334,7 @@ async def admin_bookings(
     conn=Depends(getDB)
 ):
 
-    # 只有管理員可以進入
+    # 只有管理員可以查看
     user = require_login(
         request,
         roles=("admin",)
@@ -350,7 +351,9 @@ async def admin_bookings(
                 b.start_time,
                 b.end_time,
                 b.status,
-                b.review_comment
+                b.review_comment,
+                b.checked_out_at,
+                b.returned_at
             FROM bookings b
             JOIN users u ON b.user_id = u.id
             JOIN rooms r ON b.room_id = r.id
@@ -379,13 +382,11 @@ async def review_booking(
     conn=Depends(getDB)
 ):
 
-    # 只有管理員可以審核
     require_login(
         request,
         roles=("admin",)
     )
 
-    # 取得審核表單
     form = await request.form()
 
     try:
@@ -402,25 +403,22 @@ async def review_booking(
         form.get("review_comment", "")
     ).strip()
 
-    # 只能核准或退件
     if action not in ("approved", "rejected"):
         raise HTTPException(
             status_code=400,
             detail="審核動作不正確"
         )
 
-    # 限制審核意見長度
     if len(review_comment) > 1000:
         raise HTTPException(
             status_code=400,
             detail="審核意見不能超過1000字"
         )
 
-    # 更新預約狀態
     async with conn.transaction():
         async with conn.cursor() as cur:
 
-            # 取得並鎖定這筆預約
+            # 鎖定預約，避免重複審核
             await cur.execute("""
                 SELECT id, status
                 FROM bookings
@@ -433,17 +431,16 @@ async def review_booking(
             if booking is None:
                 raise HTTPException(
                     status_code=404,
-                    detail="找不到這筆預約"
+                    detail="找不到預約"
                 )
 
-            # 只有待審核的預約能審核
             if booking["status"] != "pending":
                 raise HTTPException(
                     status_code=409,
-                    detail="這筆預約已經完成審核"
+                    detail="這筆預約已經審核"
                 )
 
-            # 儲存核准或退件結果
+            # 更新審核狀態及意見
             await cur.execute("""
                 UPDATE bookings
                 SET status = %s,
@@ -455,8 +452,226 @@ async def review_booking(
                 booking_id
             ))
 
-    # 審核完成後返回管理員頁面
     return RedirectResponse(
         url="/booking/admin",
         status_code=303
+    )
+
+
+# =====================================
+# 5. 管理員確認借出
+# =====================================
+
+@router.post("/admin/checkout")
+async def checkout_booking(
+    request: Request,
+    conn=Depends(getDB)
+):
+
+    require_login(
+        request,
+        roles=("admin",)
+    )
+
+    form = await request.form()
+
+    try:
+        booking_id = int(form["booking_id"])
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(
+            status_code=400,
+            detail="預約編號不正確"
+        )
+
+    async with conn.transaction():
+        async with conn.cursor() as cur:
+
+            await cur.execute("""
+                SELECT status, checked_out_at, returned_at
+                FROM bookings
+                WHERE id = %s
+                FOR UPDATE
+            """, (booking_id,))
+
+            booking = await cur.fetchone()
+
+            if booking is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="找不到預約"
+                )
+
+            if booking["status"] != "approved":
+                raise HTTPException(
+                    status_code=409,
+                    detail="預約尚未核准，不能借出"
+                )
+
+            if booking["checked_out_at"] is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="這筆預約已經借出"
+                )
+
+            # 記錄借出時間
+            await cur.execute("""
+                UPDATE bookings
+                SET checked_out_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (booking_id,))
+
+            # 同時記錄借用物品
+            await cur.execute("""
+                UPDATE booking_items
+                SET checked_out_at = CURRENT_TIMESTAMP
+                WHERE booking_id = %s
+                  AND checked_out_at IS NULL
+            """, (booking_id,))
+
+    return RedirectResponse(
+        url="/booking/admin",
+        status_code=303
+    )
+
+
+# =====================================
+# 6. 管理員確認歸還
+# =====================================
+
+@router.post("/admin/return")
+async def return_booking(
+    request: Request,
+    conn=Depends(getDB)
+):
+
+    require_login(
+        request,
+        roles=("admin",)
+    )
+
+    form = await request.form()
+
+    try:
+        booking_id = int(form["booking_id"])
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(
+            status_code=400,
+            detail="預約編號不正確"
+        )
+
+    async with conn.transaction():
+        async with conn.cursor() as cur:
+
+            await cur.execute("""
+                SELECT status, checked_out_at, returned_at
+                FROM bookings
+                WHERE id = %s
+                FOR UPDATE
+            """, (booking_id,))
+
+            booking = await cur.fetchone()
+
+            if booking is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="找不到預約"
+                )
+
+            if booking["status"] != "approved":
+                raise HTTPException(
+                    status_code=409,
+                    detail="只有核准的預約可以歸還"
+                )
+
+            if booking["checked_out_at"] is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="尚未借出，不能歸還"
+                )
+
+            if booking["returned_at"] is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="這筆預約已經歸還"
+                )
+
+            # 記錄歸還時間
+            await cur.execute("""
+                UPDATE bookings
+                SET returned_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (booking_id,))
+
+            # 同時記錄所有借用物品
+            await cur.execute("""
+                UPDATE booking_items
+                SET returned_at = CURRENT_TIMESTAMP
+                WHERE booking_id = %s
+                  AND checked_out_at IS NOT NULL
+                  AND returned_at IS NULL
+            """, (booking_id,))
+
+    return RedirectResponse(
+        url="/booking/admin",
+        status_code=303
+    )
+
+
+# =====================================
+# 7. 我的借用紀錄（這次新增）
+# =====================================
+
+@router.get("/history")
+async def booking_history(
+    request: Request,
+    conn=Depends(getDB)
+):
+
+    # 必須登入才能查看自己的紀錄
+    user = require_login(request)
+
+    # 只查詢目前登入者的預約
+    async with conn.cursor() as cur:
+        await cur.execute("""
+            SELECT
+                b.id,
+                r.code AS room_code,
+                r.name AS room_name,
+                b.booking_date,
+                b.start_time,
+                b.end_time,
+                b.status,
+                b.review_comment,
+                b.checked_out_at,
+                b.returned_at,
+
+                COALESCE((
+                    SELECT STRING_AGG(
+                        i.name || ' × ' || bi.quantity::TEXT,
+                        '、'
+                        ORDER BY i.name
+                    )
+                    FROM booking_items bi
+                    JOIN items i ON bi.item_id = i.id
+                    WHERE bi.booking_id = b.id
+                ), '') AS items_summary
+
+            FROM bookings b
+            JOIN rooms r ON b.room_id = r.id
+
+            WHERE b.user_id = %s
+
+            ORDER BY b.created_at DESC, b.id DESC
+        """, (user["id"],))
+
+        bookings = await cur.fetchall()
+
+    # 將自己的紀錄傳給 HTML
+    return templates.TemplateResponse(
+        request,
+        "booking/history.html",
+        {
+            "user": user,
+            "bookings": bookings
+        }
     )

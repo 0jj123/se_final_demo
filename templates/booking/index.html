@@ -7,6 +7,26 @@
 
 <h2>空間／物品預約借用</h2>
 
+<!-- 功能導覽 -->
+<p>
+    <a href="/booking/">教室預約</a>
+    |
+    <a href="/booking/history">我的借用紀錄</a>
+
+    {% if user and user.role == "admin" %}
+        |
+        <a href="/booking/admin">管理員預約管理</a>
+    {% endif %}
+</p>
+
+{% if not user %}
+<p>※ 查看借用紀錄及送出預約需要先登入。</p>
+{% endif %}
+
+<hr>
+
+<h3>查詢教室借用狀況</h3>
+
 <p>請選擇教室及查詢日期：</p>
 
 <form action="/booking/" method="get">
@@ -19,7 +39,7 @@
         {% for room in rooms %}
         <option value="{{ room.id }}"
             {% if selected_room and selected_room.id == room.id %}
-            selected
+                selected
             {% endif %}
         >
             {{ room.code }} - {{ room.name }}
@@ -122,9 +142,9 @@
 
 <h3>新增教室預約</h3>
 
-<p>請填寫想要預約的日期、時間及借用物品。</p>
+<p>請填寫預約日期、時間及借用物品。</p>
 
-<form id="booking-form" action="/booking/create" method="post">
+<form action="/booking/create" method="post">
 
     <p>
         <label for="booking_room">預約教室：</label>
@@ -194,7 +214,9 @@
             （總數量：{{ item.total_quantity }}）
         </label>
 
-        <label for="quantity_{{ item.id }}">借用數量：</label>
+        <label for="quantity_{{ item.id }}">
+            借用數量：
+        </label>
 
         <input
             type="number"
@@ -219,7 +241,7 @@
 
 </form>
 
-<p>※ 目前僅供表單測試，尚未開放送出預約。</p>
+<p>※ 預約送出功能尚待登入系統整合與測試。</p>
 
 {% endif %}
 

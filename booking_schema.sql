@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS bookings (
     review_comment TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    checked_out_at TIMESTAMP,
+    returned_at TIMESTAMP,
+
     CHECK (start_time < end_time)
 );
 
@@ -56,3 +59,9 @@ CREATE TABLE IF NOT EXISTS booking_items (
         )
     )
 );
+
+
+-- 4. 更新已經存在的預約資料表
+ALTER TABLE bookings
+    ADD COLUMN IF NOT EXISTS checked_out_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS returned_at TIMESTAMP;

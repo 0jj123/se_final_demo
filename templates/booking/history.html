@@ -1,0 +1,106 @@
+
+{% extends "base.html" %}
+
+{% block title %}我的借用紀錄{% endblock %}
+
+{% block content %}
+
+<h2>我的借用紀錄</h2>
+
+<p>查看自己的教室預約、借用物品及借還狀態。</p>
+
+<p>
+    <a href="/booking/">返回預約借用頁面</a>
+</p>
+
+<hr>
+
+{% if bookings %}
+
+<div style="overflow-x: auto;">
+
+<table border="1" cellpadding="10"
+       cellspacing="0"
+       style="border-collapse: collapse;
+              width: 100%;
+              text-align: center;">
+
+    <tr>
+        <th>預約編號</th>
+        <th>教室</th>
+        <th>預約日期</th>
+        <th>預約時間</th>
+        <th>借用物品</th>
+        <th>審核狀態</th>
+        <th>借還狀態</th>
+        <th>審核意見</th>
+    </tr>
+
+    {% for booking in bookings %}
+
+    <tr>
+        <td>{{ booking.id }}</td>
+
+        <td>
+            {{ booking.room_code }} -
+            {{ booking.room_name }}
+        </td>
+
+        <td>{{ booking.booking_date }}</td>
+
+        <td>
+            {{ booking.start_time.strftime('%H:%M') }}
+            ~
+            {{ booking.end_time.strftime('%H:%M') }}
+        </td>
+
+        <td>
+            {{ booking.items_summary or "無額外物品" }}
+        </td>
+
+        <td>
+            {% if booking.status == 'pending' %}
+                待審核
+            {% elif booking.status == 'approved' %}
+                已核准
+            {% elif booking.status == 'rejected' %}
+                已退件
+            {% endif %}
+        </td>
+
+        <td>
+            {% if booking.returned_at %}
+                已歸還
+                <p>
+                    {{ booking.returned_at.strftime('%Y-%m-%d %H:%M') }}
+                </p>
+
+            {% elif booking.checked_out_at %}
+                已借出
+                <p>
+                    {{ booking.checked_out_at.strftime('%Y-%m-%d %H:%M') }}
+                </p>
+
+            {% else %}
+                尚未借出
+            {% endif %}
+        </td>
+
+        <td>
+            {{ booking.review_comment or "無" }}
+        </td>
+    </tr>
+
+    {% endfor %}
+
+</table>
+
+</div>
+
+{% else %}
+
+<p>目前還沒有任何借用紀錄。</p>
+
+{% endif %}
+
+{% endblock %}

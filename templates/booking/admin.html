@@ -1,13 +1,13 @@
 
 {% extends "base.html" %}
 
-{% block title %}管理員預約審核{% endblock %}
+{% block title %}管理員預約管理{% endblock %}
 
 {% block content %}
 
-<h2>管理員預約審核</h2>
+<h2>管理員預約管理</h2>
 
-<p>查看所有教室預約申請及審核狀態。</p>
+<p>管理教室預約審核、借出及歸還紀錄。</p>
 
 <p>
     <a href="/booking/">返回預約借用頁面</a>
@@ -15,127 +15,166 @@
 
 <hr>
 
-<h3>預約申請紀錄</h3>
+<h3>預約申請與借用紀錄</h3>
 
 {% if bookings %}
 
 <div style="overflow-x: auto;">
 
-    <table border="1" cellpadding="10"
-           cellspacing="0"
-           style="border-collapse: collapse;
-                  width: 100%;
-                  text-align: center;">
+<table border="1" cellpadding="10"
+       cellspacing="0"
+       style="border-collapse: collapse;
+              width: 100%;
+              text-align: center;">
 
-        <tr>
-            <th>預約編號</th>
-            <th>申請人</th>
-            <th>教室</th>
-            <th>預約日期</th>
-            <th>預約時間</th>
-            <th>審核狀態</th>
-            <th>審核意見</th>
-            <th>操作</th>
-        </tr>
+    <tr>
+        <th>編號</th>
+        <th>申請人</th>
+        <th>教室</th>
+        <th>預約日期</th>
+        <th>預約時間</th>
+        <th>審核狀態</th>
+        <th>借還狀態</th>
+        <th>審核意見</th>
+        <th>操作</th>
+    </tr>
 
-        {% for booking in bookings %}
+    {% for booking in bookings %}
 
-        <tr>
+    <tr>
 
-            <td>{{ booking.id }}</td>
+        <td>{{ booking.id }}</td>
 
-            <td>{{ booking.username }}</td>
+        <td>{{ booking.username }}</td>
 
-            <td>
-                {{ booking.room_code }}
-                -
-                {{ booking.room_name }}
-            </td>
+        <td>
+            {{ booking.room_code }} -
+            {{ booking.room_name }}
+        </td>
 
-            <td>{{ booking.booking_date }}</td>
+        <td>{{ booking.booking_date }}</td>
 
-            <td>
-                {{ booking.start_time.strftime('%H:%M') }}
-                ~
-                {{ booking.end_time.strftime('%H:%M') }}
-            </td>
+        <td>
+            {{ booking.start_time.strftime('%H:%M') }}
+            ~
+            {{ booking.end_time.strftime('%H:%M') }}
+        </td>
 
-            <td>
-                {% if booking.status == 'pending' %}
-                    待審核
-                {% elif booking.status == 'approved' %}
-                    已核准
-                {% elif booking.status == 'rejected' %}
-                    已退件
-                {% endif %}
-            </td>
+        <td>
+            {% if booking.status == 'pending' %}
+                待審核
+            {% elif booking.status == 'approved' %}
+                已核准
+            {% elif booking.status == 'rejected' %}
+                已退件
+            {% endif %}
+        </td>
 
-            <td>
-                {{ booking.review_comment or "無" }}
-            </td>
+        <td>
+            {% if booking.returned_at %}
+                已歸還
+                <p>{{ booking.returned_at.strftime('%Y-%m-%d %H:%M') }}</p>
 
-            <td>
+            {% elif booking.checked_out_at %}
+                已借出
+                <p>{{ booking.checked_out_at.strftime('%Y-%m-%d %H:%M') }}</p>
 
-                {% if booking.status == 'pending' %}
+            {% else %}
+                尚未借出
+            {% endif %}
+        </td>
 
-                <form action="/booking/admin/review"
-                      method="post">
+        <td>
+            {{ booking.review_comment or "無" }}
+        </td>
 
-                    <input
-                        type="hidden"
-                        name="booking_id"
-                        value="{{ booking.id }}"
-                    >
+        <td>
 
-                    <p>
-                        <label for="comment_{{ booking.id }}">
-                            審核意見：
-                        </label>
-                    </p>
+            {% if booking.status == 'pending' %}
 
-                    <textarea
-                        id="comment_{{ booking.id }}"
-                        name="review_comment"
-                        rows="3"
-                        placeholder="請輸入審核意見"
-                        disabled
-                    ></textarea>
+            <!-- 審核預約 -->
+            <form action="/booking/admin/review" method="post">
 
-                    <p>
-                        <button
-                            type="submit"
+                <input type="hidden"
+                       name="booking_id"
+                       value="{{ booking.id }}">
+
+                <textarea name="review_comment"
+                          rows="3"
+                          placeholder="審核意見"
+                          disabled></textarea>
+
+                <p>
+                    <button type="submit"
                             name="action"
                             value="approved"
-                            disabled
-                        >
-                            核准
-                        </button>
+                            disabled>
+                        核准
+                    </button>
 
-                        <button
-                            type="submit"
+                    <button type="submit"
                             name="action"
                             value="rejected"
-                            disabled
-                        >
-                            退件
-                        </button>
-                    </p>
+                            disabled>
+                        退件
+                    </button>
+                </p>
+
+            </form>
+
+            {% elif booking.status == 'approved' %}
+
+                {% if not booking.checked_out_at %}
+
+                <!-- 確認借出 -->
+                <form action="/booking/admin/checkout"
+                      method="post">
+
+                    <input type="hidden"
+                           name="booking_id"
+                           value="{{ booking.id }}">
+
+                    <button type="submit" disabled>
+                        確認借出
+                    </button>
+
+                </form>
+
+                {% elif not booking.returned_at %}
+
+                <!-- 確認歸還 -->
+                <form action="/booking/admin/return"
+                      method="post">
+
+                    <input type="hidden"
+                           name="booking_id"
+                           value="{{ booking.id }}">
+
+                    <button type="submit" disabled>
+                        確認歸還
+                    </button>
 
                 </form>
 
                 {% else %}
 
-                    已完成審核
+                    已完成歸還
 
                 {% endif %}
 
-            </td>
+            {% else %}
 
-        </tr>
+                已退件
 
-        {% endfor %}
+            {% endif %}
 
-    </table>
+        </td>
+
+    </tr>
+
+    {% endfor %}
+
+</table>
 
 </div>
 
@@ -147,6 +186,6 @@
 
 <hr>
 
-<p>※ 審核功能尚未開放，待後端審核功能完成後啟用。</p>
+<p>※ 管理員操作按鈕暫時停用，待登入系統整合及功能測試後開放。</p>
 
 {% endblock %}
