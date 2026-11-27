@@ -1,0 +1,152 @@
+
+{% extends "base.html" %}
+
+{% block title %}管理員預約審核{% endblock %}
+
+{% block content %}
+
+<h2>管理員預約審核</h2>
+
+<p>查看所有教室預約申請及審核狀態。</p>
+
+<p>
+    <a href="/booking/">返回預約借用頁面</a>
+</p>
+
+<hr>
+
+<h3>預約申請紀錄</h3>
+
+{% if bookings %}
+
+<div style="overflow-x: auto;">
+
+    <table border="1" cellpadding="10"
+           cellspacing="0"
+           style="border-collapse: collapse;
+                  width: 100%;
+                  text-align: center;">
+
+        <tr>
+            <th>預約編號</th>
+            <th>申請人</th>
+            <th>教室</th>
+            <th>預約日期</th>
+            <th>預約時間</th>
+            <th>審核狀態</th>
+            <th>審核意見</th>
+            <th>操作</th>
+        </tr>
+
+        {% for booking in bookings %}
+
+        <tr>
+
+            <td>{{ booking.id }}</td>
+
+            <td>{{ booking.username }}</td>
+
+            <td>
+                {{ booking.room_code }}
+                -
+                {{ booking.room_name }}
+            </td>
+
+            <td>{{ booking.booking_date }}</td>
+
+            <td>
+                {{ booking.start_time.strftime('%H:%M') }}
+                ~
+                {{ booking.end_time.strftime('%H:%M') }}
+            </td>
+
+            <td>
+                {% if booking.status == 'pending' %}
+                    待審核
+                {% elif booking.status == 'approved' %}
+                    已核准
+                {% elif booking.status == 'rejected' %}
+                    已退件
+                {% endif %}
+            </td>
+
+            <td>
+                {{ booking.review_comment or "無" }}
+            </td>
+
+            <td>
+
+                {% if booking.status == 'pending' %}
+
+                <form action="/booking/admin/review"
+                      method="post">
+
+                    <input
+                        type="hidden"
+                        name="booking_id"
+                        value="{{ booking.id }}"
+                    >
+
+                    <p>
+                        <label for="comment_{{ booking.id }}">
+                            審核意見：
+                        </label>
+                    </p>
+
+                    <textarea
+                        id="comment_{{ booking.id }}"
+                        name="review_comment"
+                        rows="3"
+                        placeholder="請輸入審核意見"
+                        disabled
+                    ></textarea>
+
+                    <p>
+                        <button
+                            type="submit"
+                            name="action"
+                            value="approved"
+                            disabled
+                        >
+                            核准
+                        </button>
+
+                        <button
+                            type="submit"
+                            name="action"
+                            value="rejected"
+                            disabled
+                        >
+                            退件
+                        </button>
+                    </p>
+
+                </form>
+
+                {% else %}
+
+                    已完成審核
+
+                {% endif %}
+
+            </td>
+
+        </tr>
+
+        {% endfor %}
+
+    </table>
+
+</div>
+
+{% else %}
+
+<p>目前尚無預約申請紀錄。</p>
+
+{% endif %}
+
+<hr>
+
+<p>※ 審核功能尚未開放，待後端審核功能完成後啟用。</p>
+
+{% endblock %}
